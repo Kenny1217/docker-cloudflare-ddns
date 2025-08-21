@@ -9,8 +9,6 @@ CLOUDFLARE_BASE_URL="https://api.cloudflare.com/client/v4"
 CLOUDFLARE_API_TOKEN=""
 CLOUDFLARE_DOMAIN_NAME=""
 CLOUDFLARE_ZONE_ID=""
-CLOUDFLARE_DNS_RECORD_ID=""
-CURRENT_PUBLIC_IP=""
 
 
 get_public_ip(){
@@ -32,7 +30,7 @@ get_public_ip(){
 
 cloudflare_verify_token(){
     echo "Verifying Cloudflare token"
-    response=$(curl --slient --max-time 10 --retry 3 "${CLOUDFLARE_BASE_URL}/user/tokens/verify" \
+    response=$(curl --silent --max-time 10 --retry 3 "${CLOUDFLARE_BASE_URL}/user/tokens/verify" \
         -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")
     success_status=$(echo "${response}" | jq -r '.success')
     if [ "${success_status}" != "true" ]; then
@@ -47,9 +45,30 @@ cloudflare_verify_token(){
     fi
 }
 
+cloudflare_update_check(){
+    response=$(curl --silent --max-time 10 --retry 3 "${CLOUDFLARE_BASE_URL}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${CLOUDFLARE_DOMAIN_NAME}" \
+        -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" 
+    )
+    success_status=$(echo "${response}" | jq -r '.success')
+    if [ "${success_status}" != "true" ]; then
+        echo "${response}" | jq -r '.errors'
+        exit 1
+    fi
+    cloudflare_stored_ip=$(echo "${response}" | jq -r '.result[0].content')
+    if [ "${cloudflare_stored_ip}" == "${CURRENT_PUBLIC_IP}" ]; then
+        echo "No record change required"
+        exit 1
+    fi
+    echo "Record change required"
+    CLOUDFLARE_DNS_RECORD_ID=$(echo "${response}" | jq -r '.result[0].id')
+}
+
 main(){
+    CURRENT_PUBLIC_IP=""
+    CLOUDFLARE_DNS_RECORD_ID=""
     get_public_ip
     cloudflare_verify_token
+    cloudflare_update_check
 }
 
 main
