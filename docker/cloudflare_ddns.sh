@@ -10,7 +10,7 @@ CLOUDFLARE_API_TOKEN=""
 CLOUDFLARE_DOMAIN_NAME=""
 CLOUDFLARE_ZONE_ID=""
 CLOUDFLARE_DNS_RECORD_ID=""
-
+CURRENT_PUBLIC_IP=""
 
 
 get_public_ip(){
@@ -30,10 +30,26 @@ get_public_ip(){
     exit 1
 }
 
-main(){
-    CURRENT_PUBLIC_IP=""
-    get_public_ip
+cloudflare_verify_token(){
+    echo "Verifying Cloudflare token"
+    response=$(curl --slient --max-time 10 --retry 3 "${CLOUDFLARE_BASE_URL}/user/tokens/verify" \
+        -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")
+    success_status=$(echo "${response}" | jq -r '.success')
+    if [ "${success_status}" != "true" ]; then
+        echo "${response}" | jq -r '.errors'
+        exit 1
+    fi
+    token_status=$(echo "${response}" | jq -r '.result.status')
+    echo "API token is ${token_status}"
+    if [ "${token_status}" != "active" ]; then
+        echo "Check API token in Cloudflare account"
+        exit 1
+    fi
+}
 
+main(){
+    get_public_ip
+    cloudflare_verify_token
 }
 
 main
